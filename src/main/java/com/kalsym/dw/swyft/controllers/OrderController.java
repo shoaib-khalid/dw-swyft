@@ -3,7 +3,7 @@ package com.kalsym.dw.swyft.controllers;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kalsym.dw.swyft.models.CancelParcelResponse;
-import com.kalsym.dw.swyft.models.OrderDetails;
+import com.kalsym.dw.swyft.models.Order;
 import com.kalsym.dw.swyft.models.ParcelHistory;
 import com.kalsym.dw.swyft.models.ProviderConfig;
 import com.kalsym.dw.swyft.models.SubmitOrderRequest;
@@ -30,18 +30,65 @@ public class OrderController {
     private static final Logger logger = LoggerFactory.getLogger("Swyft-Application");
     private static WebClient swyftClient;
 
-    public Object getPrice() {
-        return null;
+    public Object getPrice(String providerConfig, Order order) {
+
+        String pickupCity = order.getPickup().getPickupCity();
+        String deliveryCity = order.getDelivery().getDeliveryCity();
+        String zonePickup = order.getPickup().getPickupZone();
+        String zoneDelivery = order.getDelivery().getDeliveryZone();
+        Double weight = order.getTotalWeightKg();
+
+        Double fuelChargeRate = 16.0;
+        Double gstRate = 8.5;
+        Double totalCharge = 0.00;
+
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            ProviderConfig configObj = mapper.readValue(providerConfig, ProviderConfig.class);
+            fuelChargeRate = configObj.getFuelCharges();
+            gstRate = configObj.getGst();
+        } catch (JsonProcessingException ex) {
+            logger.error("Failed to process json string for providerConfig", ex);
+            return null;
+        }
+
+        if (!zonePickup.equals("null") && !zoneDelivery.equals("null") && !pickupCity.equals("null") && !deliveryCity.equals("null")) {
+            if (pickupCity.equals(deliveryCity)) {
+                totalCharge = calculatePrice(weight, 119.0, 125.0, 50.0);
+            } else if (zonePickup.equals(zoneDelivery)) {
+                totalCharge = calculatePrice(weight, 125.0, 138.0, 60.0);
+            } else {
+                totalCharge = calculatePrice(weight, 151.0, 163.0, 70.0);
+            }
+            Double fuelCharge = totalCharge * fuelChargeRate / 100.0;
+            Double gst = totalCharge * gstRate / 100.0;
+            totalCharge += fuelCharge + gst;
+        }
+
+        return totalCharge;
+    }
+
+    private Double calculatePrice(Double weight, Double lowerBasePrice, 
+            Double higherBasePrice, Double additionalPrice) {
+        if (weight <= 0.5) {
+            return lowerBasePrice;
+        }
+
+        if (weight <= 1.0) {
+            return higherBasePrice;
+        }
+        
+        return higherBasePrice + (weight - 1) * additionalPrice;
     }
 
     public Object submitOrder(String providerConfig, String orderString, String systemTransactionId) {
 //        String endpoint = "/api-upload";
         ObjectMapper mapper = new ObjectMapper();
         ProviderConfig configObj = new ProviderConfig();
-        OrderDetails order = new OrderDetails();
+        Order order = new Order();
         try {
             configObj = mapper.readValue(providerConfig, ProviderConfig.class);
-            order = mapper.readValue(orderString, OrderDetails.class);
+            order = mapper.readValue(orderString, Order.class);
         } catch (JsonProcessingException ex) {
             logger.error("Failed to process json string for providerConfig", ex);
             return null;
@@ -103,11 +150,11 @@ public class OrderController {
         } catch (WebClientResponseException ex) {
             logger.error("Error while cancelling order. Status Code: {}, {}, Error Body: {}",
                     ex.getStatusCode(), ex.getStatusText(), ex.getResponseBodyAsString());
-            
+
             try {
                 response = mapper.readValue(ex.getResponseBodyAsString(), CancelParcelResponse.class);
             } catch (JsonProcessingException ex1) {
-                logger.error("Error while parsing json string", ex.getLocalizedMessage());
+                logger.error("Error while parsing json string", ex1.getLocalizedMessage());
             }
         } catch (NullPointerException ex) {
             logger.error("Error while getting property from provider configuration", ex);
@@ -127,7 +174,7 @@ public class OrderController {
             logger.error("Failed to process json string for providerConfig", ex);
             return null;
         }
-        
+
         ParcelHistory response = null;
         String errorResponse = null;
 

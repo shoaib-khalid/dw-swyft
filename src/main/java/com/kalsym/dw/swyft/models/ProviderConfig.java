@@ -28,5 +28,8 @@ public class ProviderConfig {
     String cancelOrderEndpoint;
     @JsonProperty("query_order_endpoint")
     String queryOrderEndpoint;
-
+    @JsonProperty("gst")
+    Double gst;
+    @JsonProperty("fuel_charges")
+    Double fuelCharges;
 }

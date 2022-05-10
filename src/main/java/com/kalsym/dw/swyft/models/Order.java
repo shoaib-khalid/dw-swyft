@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class OrderDetails {
+public class Order {
 
     String orderId;
     String customerId;
@@ -29,6 +29,6 @@ public class OrderDetails {
     Double totalWeightKg;
     String shipmentContent;
 
-    DeliveryDetails delivery;
-    PickupDetails pickup;
+    Delivery delivery;
+    Pickup pickup;
 }

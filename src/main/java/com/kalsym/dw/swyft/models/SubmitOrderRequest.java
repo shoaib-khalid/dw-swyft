@@ -49,7 +49,7 @@ public class SubmitOrderRequest {
     @JsonProperty("SHIPPER_ADDRESS_ID")
     String shipperAddressId;
 
-    public SubmitOrderRequest(OrderDetails order) {
+    public SubmitOrderRequest(Order order) {
         this.orderType = order.getPaymentType();
         this.consigneeFirstName = order.getDelivery().getDeliveryContactName();
         this.consigneeLastName = order.getDelivery().getDeliveryContactName();

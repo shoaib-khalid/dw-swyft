@@ -12,7 +12,7 @@ import lombok.Data;
  * @author imran
  */
 @Data
-public class DeliveryDetails {
+public class Delivery {
 
     String deliveryContactPhone;
     String deliveryContactName;
@@ -22,6 +22,7 @@ public class DeliveryDetails {
     String deliveryState;
     String deliveryCity;
     String deliveryCountry;
+    String deliveryZone;
 
     BigDecimal latitude;
     BigDecimal longitude;

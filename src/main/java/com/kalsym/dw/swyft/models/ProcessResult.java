@@ -4,13 +4,12 @@
  */
 package com.kalsym.dw.swyft.models;
 
-import lombok.Data;
-
 /**
  *
  * @author imran
  */
-@Data
-public class PickupDetails {
-    String pickupCity;
+public class ProcessResult {
+    public int resultCode;
+    public String resultString;
+    public Object returnObject;
 }
