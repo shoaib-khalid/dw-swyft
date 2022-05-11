@@ -48,8 +48,8 @@ public class OrderController {
             fuelChargeRate = configObj.getFuelCharges();
             gstRate = configObj.getGst();
         } catch (JsonProcessingException ex) {
-            logger.error("Failed to process json string for providerConfig", ex);
-            return null;
+            logger.error("Failed to process configuration string. Using default values for fuel charges and GST instead.", 
+                    ex.getLocalizedMessage());
         }
 
         if (!zonePickup.equals("null") && !zoneDelivery.equals("null") && !pickupCity.equals("null") && !deliveryCity.equals("null")) {
