@@ -64,6 +64,6 @@ public class SubmitOrderRequest {
         this.cod = order.getShipmentValue();
         this.description = order.getShipmentContent();
         this.weight = order.getTotalWeightKg();
-        this.shipperAddressId = null;
+        this.shipperAddressId = order.getPickup().getCostCenterCode();
     }
 }

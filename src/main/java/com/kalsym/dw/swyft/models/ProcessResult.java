@@ -4,10 +4,12 @@
  */
 package com.kalsym.dw.swyft.models;
 
+import lombok.ToString;
+
 /**
- *
  * @author imran
  */
+@ToString
 public class ProcessResult {
     public int resultCode;
     public String resultString;

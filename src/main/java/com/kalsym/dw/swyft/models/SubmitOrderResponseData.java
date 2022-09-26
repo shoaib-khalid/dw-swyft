@@ -6,10 +6,15 @@ package com.kalsym.dw.swyft.models;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import lombok.Getter;
+import lombok.Setter;
+
 /**
  *
  * @author imran
  */
+@Getter
+@Setter
 public class SubmitOrderResponseData {
 
     @JsonProperty("consigneeName")

@@ -32,4 +32,6 @@ public class ProviderConfig {
     Double gst;
     @JsonProperty("fuel_charges")
     Double fuelCharges;
+    @JsonProperty("vendorId")
+    String vendorId;
 }

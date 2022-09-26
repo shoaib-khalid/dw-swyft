@@ -15,12 +15,12 @@ import org.json.JSONObject;
  */
 public class DwSwyft {
 
-    public static void main(String[] args) throws JsonProcessingException {
-        ObjectMapper mapper = new ObjectMapper();
-        ProviderConfig config = new ProviderConfig();
-        config.setBaseUrl("wiaujdsoia");
-        config.setApiKey("aoiuejoijas");
-        JSONObject jsonObj = new JSONObject(mapper.writeValueAsString(config));
-        System.out.println(jsonObj.get("api_key"));
-    }
+//    public static void main(String[] args) throws JsonProcessingException {
+//        ObjectMapper mapper = new ObjectMapper();
+//        ProviderConfig config = new ProviderConfig();
+//        config.setBaseUrl("wiaujdsoia");
+//        config.setApiKey("aoiuejoijas");
+//        JSONObject jsonObj = new JSONObject(mapper.writeValueAsString(config));
+//        System.out.println(jsonObj.get("api_key"));
+//    }
 }

@@ -1,15 +1,20 @@
-package com.kalsym.dw.swyft.controllers;
+package com.kalsym.dw.swyft.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kalsym.dw.swyft.models.CancelParcelResponse;
-import com.kalsym.dw.swyft.models.Order;
-import com.kalsym.dw.swyft.models.ParcelHistory;
-import com.kalsym.dw.swyft.models.ProviderConfig;
-import com.kalsym.dw.swyft.models.SubmitOrderRequest;
-import com.kalsym.dw.swyft.models.SubmitOrderResponse;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.kalsym.dw.swyft.models.*;
+import com.kalsym.dw.swyft.models.daos.DeliveryOrder;
+import com.kalsym.dw.swyft.models.enums.DeliveryCompletionStatus;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+
+import com.kalsym.dw.swyft.utils.LogUtil;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,21 +27,28 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Mono;
 
 /**
- *
  * @author imran
+ * @review Kumar
  */
 public class OrderController {
 
     private static final Logger logger = LoggerFactory.getLogger("Swyft-Application");
     private static WebClient swyftClient;
 
-    public Object getPrice(String providerConfig, Order order) {
+    public Object getPrice(String providerConfig, String orderObject, String systemTransactionId, String fulfillment) {
+        logger.warn("Request Get Price [:{}], Request Body : {}", systemTransactionId, orderObject);
 
-        String pickupCity = order.getPickup().getPickupCity();
-        String deliveryCity = order.getDelivery().getDeliveryCity();
-        String zonePickup = order.getPickup().getPickupZone();
-        String zoneDelivery = order.getDelivery().getDeliveryZone();
-        Double weight = order.getTotalWeightKg();
+        ProcessResult response = new ProcessResult();
+
+        JsonObject order = new Gson().fromJson(orderObject, JsonObject.class);
+
+        JsonObject fulfillments = new Gson().fromJson(fulfillment, JsonObject.class);
+
+        String pickupCity = order.getAsJsonObject("pickup").get("pickupCity").getAsString();
+        String deliveryCity = order.getAsJsonObject("delivery").get("deliveryCity").getAsString();
+        String zonePickup = order.getAsJsonObject("pickup").get("pickupZone").getAsString();
+        String zoneDelivery = order.getAsJsonObject("delivery").get("deliveryZone").getAsString();
+        Double weight = order.get("totalWeightKg").getAsDouble();
 
         Double fuelChargeRate = 16.0;
         Double gstRate = 8.5;
@@ -48,11 +60,13 @@ public class OrderController {
             fuelChargeRate = configObj.getFuelCharges();
             gstRate = configObj.getGst();
         } catch (JsonProcessingException ex) {
-            logger.error("Failed to process configuration string. Using default values for fuel charges and GST instead.", 
+            logger.error(
+                    "Failed to process configuration string. Using default values for fuel charges and GST instead.",
                     ex.getLocalizedMessage());
         }
 
-        if (!zonePickup.equals("null") && !zoneDelivery.equals("null") && !pickupCity.equals("null") && !deliveryCity.equals("null")) {
+        if (!zonePickup.equals("null") && !zoneDelivery.equals("null") && !pickupCity.equals("null")
+                && !deliveryCity.equals("null")) {
             if (pickupCity.equals(deliveryCity)) {
                 totalCharge = calculatePrice(weight, 119.0, 125.0, 50.0);
             } else if (zonePickup.equals(zoneDelivery)) {
@@ -64,12 +78,27 @@ public class OrderController {
             Double gst = totalCharge * gstRate / 100.0;
             totalCharge += fuelCharge + gst;
         }
+        PriceResult priceResult = new PriceResult();
+        BigDecimal bd = new BigDecimal(totalCharge);
+        bd = bd.setScale(2, BigDecimal.ROUND_HALF_UP);
+        priceResult.price = bd;
+        priceResult.pickupCity = pickupCity;
+        priceResult.deliveryCity = deliveryCity;
+        priceResult.pickupZone = zonePickup;
+        priceResult.deliveryZone = zoneDelivery;
+        priceResult.fulfillment = fulfillments.get("fulfillment").getAsString();
+        priceResult.interval = null;
+        response.resultCode = 0;
+        response.returnObject = priceResult;
 
-        return totalCharge;
+        LogUtil.info(systemTransactionId, "Request Url :" + response.toString(), "");
+
+
+        return new JSONObject(new Gson().toJson(response));
     }
 
-    private Double calculatePrice(Double weight, Double lowerBasePrice, 
-            Double higherBasePrice, Double additionalPrice) {
+    private Double calculatePrice(Double weight, Double lowerBasePrice,
+                                  Double higherBasePrice, Double additionalPrice) {
         if (weight <= 0.5) {
             return lowerBasePrice;
         }
@@ -77,14 +106,15 @@ public class OrderController {
         if (weight <= 1.0) {
             return higherBasePrice;
         }
-        
+
         return higherBasePrice + (weight - 1) * additionalPrice;
     }
 
     public Object submitOrder(String providerConfig, String orderString, String systemTransactionId) {
-//        String endpoint = "/api-upload";
+        // String endpoint = "/api-upload";
         ObjectMapper mapper = new ObjectMapper();
         ProviderConfig configObj = new ProviderConfig();
+        ProcessResult res = new ProcessResult();
         Order order = new Order();
         try {
             configObj = mapper.readValue(providerConfig, ProviderConfig.class);
@@ -104,14 +134,30 @@ public class OrderController {
             requestList.add(request);
 
             response = swyftClient.post()
-                    .uri(configObj.getSubmitOrderEndpoint())
+                    .uri(configObj.getVendorId() + configObj.getSubmitOrderEndpoint())
                     .body(
                             Mono.just(requestList),
                             new ParameterizedTypeReference<List<SubmitOrderRequest>>() {
-                    })
+                            })
                     .retrieve()
                     .bodyToMono(SubmitOrderResponse.class)
                     .block();
+
+            DeliveryOrder orderCreated = new DeliveryOrder();
+            for (SubmitOrderResponseData s : response.getData()) {
+                orderCreated.setSpOrderId(s.getOrderId());
+                orderCreated.setSpOrderName(s.getOrderId());
+                orderCreated.setCreatedDate(new Date().toString());
+                // orderCreated.setCustomerTrackingUrl(shareLink);
+                orderCreated.setStatus("ASSIGNING_DRIVER");
+                orderCreated.setStatusDescription("ASSIGNING_DRIVER");
+                orderCreated.setSystemStatus("ASSIGNING_DRIVER");
+            }
+            SubmitOrderResult submitOrderResult = new SubmitOrderResult();
+
+            submitOrderResult.orderCreated = orderCreated;
+            res.returnObject = submitOrderResult;
+
         } catch (WebClientResponseException ex) {
             logger.error("Failed to submit order. Status Code: {}, {}, Error Body: {}",
                     ex.getStatusCode(), ex.getStatusText(), ex.getResponseBodyAsString());
@@ -121,14 +167,20 @@ public class OrderController {
         }
 
         if (response == null) {
-            return new JSONObject(errorResponse);
+            SubmitOrderResult submitOrderResult = new SubmitOrderResult();
+            submitOrderResult.message = errorResponse;
+            res.resultCode = -1;
+            res.resultString = errorResponse;
+            res.returnObject = submitOrderResult;
+            return new JSONObject(res);
+
         }
 
-        return new JSONObject(response);
+        return new JSONObject(res);
     }
 
     public Object cancelOrder(String providerConfig, String orderId) {
-//                String endpoint = "/cancel-parcel/" + orderId;
+        // String endpoint = "/cancel-parcel/" + orderId;
         ObjectMapper mapper = new ObjectMapper();
         ProviderConfig configObj = new ProviderConfig();
         try {
@@ -164,7 +216,8 @@ public class OrderController {
     }
 
     public Object queryOrder(String providerConfig, String orderId) {
-//        String endpoint = "/get-parcel-history/" + orderId;
+        // String endpoint = "/get-parcel-history/" + orderId;
+        ProcessResult res = new ProcessResult();
 
         ObjectMapper mapper = new ObjectMapper();
         ProviderConfig configObj = new ProviderConfig();
@@ -182,10 +235,38 @@ public class OrderController {
             initWebClient(configObj.getBaseUrl(), configObj.getApiKey());
 
             response = swyftClient.get()
-                    .uri(configObj.getQueryOrderEndpoint())
+                    .uri(configObj.getVendorId() + configObj.getQueryOrderEndpoint() + orderId)
                     .retrieve()
                     .bodyToMono(ParcelHistory.class)
                     .block();
+            QueryOrderResult queryOrderResult = new QueryOrderResult();
+
+            DeliveryOrder orderFound = new DeliveryOrder();
+            assert response != null;
+            logger.error("Success response order. Status Code: {}, {}", response.getStatus(), new Date());
+            switch (response.getStatus()) {
+                case "RECEIVED":
+                case "WAITING_FOR_TRANSPORT":
+                    orderFound.setSystemStatus(DeliveryCompletionStatus.ASSIGNING_RIDER.name());
+                    break;
+                case "Awaiting Pickup":
+                    orderFound.setSystemStatus(DeliveryCompletionStatus.AWAITING_PICKUP.name());
+                    break;
+                case "Picked Up":
+                    orderFound.setSystemStatus(DeliveryCompletionStatus.BEING_DELIVERED.name());
+                    break;
+                case "Delivered":
+                    orderFound.setSystemStatus(DeliveryCompletionStatus.COMPLETED.name());
+                    break;
+                case "Canceled":
+                    orderFound.setSystemStatus(DeliveryCompletionStatus.CANCELED.name());
+                    break;
+            }
+            orderFound.setSpOrderId(orderId);
+            queryOrderResult.orderFound = orderFound;
+
+            res.resultCode = 0;
+            res.returnObject = queryOrderResult;
         } catch (WebClientResponseException ex) {
             logger.error("Error while cancelling order. Status Code: {}, {}, Error Body: {}",
                     ex.getStatusCode(), ex.getStatusText(), ex.getResponseBodyAsString());
